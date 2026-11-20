@@ -1,0 +1,14 @@
+# projet Vivado genere par scripts/build.tcl
+build/
+.Xil/
+*.jou
+*.log
+*.str
+# caches de l'ancien projet
+**/*.cache/
+**/*.hw/
+**/*.runs/
+**/*.sim/
+**/*.gen/
+**/*.ip_user_files/
+codes.json
