@@ -1,0 +1,11 @@
+*.cache/
+*.runs/
+*.sim/
+*.gen/
+*.hw/
+*.ip_user_files/
+.Xil/
+*.jou
+*.log
+*.str
+vivado_pid*
