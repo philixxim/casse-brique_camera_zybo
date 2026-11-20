@@ -1,0 +1,45 @@
+{
+   "ActiveEmotionalView":"Default View",
+   "Default View_ScaleFactor":"0.412181",
+   "Default View_TopLeft":"-99,-810",
+   "ExpandedHierarchyInLayout":"",
+   "guistr":"# # String gsaved with Nlview 7.5.8 2022-09-21 7111 VDI=41 GEI=38 GUI=JA:10.0
+#  -string -flagsOSRD
+preplace port hdmi_in -pg 1 -lvl 0 -x 0 -y 220 -defaultsOSRD
+preplace port hdmi_in_ddc -pg 1 -lvl 5 -x 1180 -y 280 -defaultsOSRD
+preplace port hdmi_out -pg 1 -lvl 5 -x 1180 -y 130 -defaultsOSRD
+preplace port port-id_CLK -pg 1 -lvl 0 -x 0 -y 160 -defaultsOSRD
+preplace port port-id_reset -pg 1 -lvl 0 -x 0 -y 140 -defaultsOSRD
+preplace port port-id_hdmi_in_hpd -pg 1 -lvl 5 -x 1180 -y 340 -defaultsOSRD
+preplace portBus btn -pg 1 -lvl 0 -x 0 -y 390 -defaultsOSRD
+preplace portBus sw -pg 1 -lvl 0 -x 0 -y 410 -defaultsOSRD
+preplace portBus led -pg 1 -lvl 5 -x 1180 -y 250 -defaultsOSRD
+preplace inst clk_wiz_0 -pg 1 -lvl 1 -x 110 -y 150 -defaultsOSRD
+preplace inst dvi2rgb_0 -pg 1 -lvl 2 -x 340 -y 250 -defaultsOSRD
+preplace inst rgb2dvi_0 -pg 1 -lvl 4 -x 1030 -y 130 -defaultsOSRD
+preplace inst xlconstant_0 -pg 1 -lvl 4 -x 1030 -y 340 -defaultsOSRD
+preplace inst jeu_top_0 -pg 1 -lvl 3 -x 710 -y 130 -defaultsOSRD
+preplace netloc CLK_1 1 0 1 NJ 160
+preplace netloc clk_wiz_0_clk_out1 1 1 1 210 150n
+preplace netloc reset_1 1 0 4 20 230 200 380 510 260 890J
+preplace netloc dvi2rgb_0_PixelClk 1 2 2 490 270 900J
+preplace netloc dvi2rgb_0_vid_pData 1 2 1 470 100n
+preplace netloc dvi2rgb_0_vid_pVDE 1 2 1 480 120n
+preplace netloc dvi2rgb_0_vid_pHSync 1 2 1 500 140n
+preplace netloc dvi2rgb_0_vid_pVSync 1 2 1 520 160n
+preplace netloc jeu_top_0_vid_out_pData 1 3 1 N 90
+preplace netloc jeu_top_0_vid_out_pVDE 1 3 1 880 110n
+preplace netloc jeu_top_0_vid_out_pHSync 1 3 1 890 110n
+preplace netloc jeu_top_0_vid_out_pVSync 1 3 1 900 130n
+preplace netloc xlconstant_0_dout 1 4 1 NJ 340
+preplace netloc btn_1 1 0 3 NJ 390 NJ 390 530J
+preplace netloc sw_1 1 0 3 NJ 410 NJ 410 540J
+preplace netloc jeu_top_0_led 1 3 2 880J 250 NJ
+preplace netloc TMDS_0_1 1 0 2 NJ 220 NJ
+preplace netloc dvi2rgb_0_DDC 1 2 3 NJ 280 NJ 280 NJ
+preplace netloc rgb2dvi_0_TMDS 1 4 1 NJ 130
+levelinfo -pg 1 0 110 340 710 1030 1180
+pagesize -pg 1 -db -bbox -sgen -100 0 1320 430
+"
+}
+
