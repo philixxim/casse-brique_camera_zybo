@@ -1,0 +1,78 @@
+{
+  "schema": "xilinx.com:schema:json_instance:1.0",
+  "ip_inst": {
+    "xci_name": "HDMI_bd_top_breakout_0_1",
+    "cell_name": "top_breakout_0",
+    "component_reference": "xilinx.com:module_ref:top_breakout:1.0",
+    "ip_revision": "1",
+    "gen_directory": "../../../../../../Jeu casse-brique.gen/sources_1/bd/HDMI_bd/ip/HDMI_bd_top_breakout_0_1",
+    "parameters": {
+      "component_parameters": {
+        "LIVRABLE": [ { "value": "4", "value_src": "user", "resolve_type": "user", "format": "long", "usage": "all" } ],
+        "Component_Name": [ { "value": "HDMI_bd_top_breakout_0_1", "resolve_type": "user", "usage": "all" } ]
+      },
+      "model_parameters": {
+        "LIVRABLE": [ { "value": "4", "resolve_type": "generated", "format": "long", "usage": "all" } ]
+      },
+      "project_parameters": {
+        "ARCHITECTURE": [ { "value": "zynq" } ],
+        "BASE_BOARD_PART": [ { "value": "digilentinc.com:zybo-z7-20:part0:1.2" } ],
+        "BOARD_CONNECTIONS": [ { "value": "" } ],
+        "DEVICE": [ { "value": "xc7z020" } ],
+        "PACKAGE": [ { "value": "clg400" } ],
+        "PREFHDL": [ { "value": "VHDL" } ],
+        "SILICON_REVISION": [ { "value": "" } ],
+        "SIMULATOR_LANGUAGE": [ { "value": "MIXED" } ],
+        "SPEEDGRADE": [ { "value": "-1" } ],
+        "STATIC_POWER": [ { "value": "" } ],
+        "TEMPERATURE_GRADE": [ { "value": "" } ]
+      },
+      "runtime_parameters": {
+        "IPCONTEXT": [ { "value": "IP_Integrator" } ],
+        "IPREVISION": [ { "value": "1" } ],
+        "MANAGED": [ { "value": "TRUE" } ],
+        "OUTPUTDIR": [ { "value": "../../../../../../Jeu casse-brique.gen/sources_1/bd/HDMI_bd/ip/HDMI_bd_top_breakout_0_1" } ],
+        "SELECTEDSIMMODEL": [ { "value": "" } ],
+        "SHAREDDIR": [ { "value": "../../ipshared" } ],
+        "SWVERSION": [ { "value": "2023.1" } ],
+        "SYNTHESISFLOW": [ { "value": "OOC_HIERARCHICAL" } ]
+      }
+    },
+    "boundary": {
+      "ports": {
+        "PixelClk": [ { "direction": "in" } ],
+        "reset": [ { "direction": "in" } ],
+        "btn_depart": [ { "direction": "in" } ],
+        "btn_pause": [ { "direction": "in" } ],
+        "sw_camera": [ { "direction": "in" } ],
+        "sw_miroir": [ { "direction": "in" } ],
+        "sw_seuil": [ { "direction": "in", "size_left": "1", "size_right": "0" } ],
+        "led_detection": [ { "direction": "out" } ],
+        "led_bleu": [ { "direction": "out" } ],
+        "led_vies": [ { "direction": "out", "size_left": "1", "size_right": "0" } ],
+        "vid_pData_entree": [ { "direction": "in", "size_left": "23", "size_right": "0" } ],
+        "vid_pVDE_entree": [ { "direction": "in" } ],
+        "vid_pHSync_entree": [ { "direction": "in" } ],
+        "vid_pVSync_entree": [ { "direction": "in" } ],
+        "vid_pData_sortie": [ { "direction": "out", "size_left": "23", "size_right": "0" } ],
+        "vid_pVDE_sortie": [ { "direction": "out" } ],
+        "vid_pHSync_sortie": [ { "direction": "out" } ],
+        "vid_pVSync_sortie": [ { "direction": "out" } ]
+      },
+      "interfaces": {
+        "reset": {
+          "vlnv": "xilinx.com:signal:reset:1.0",
+          "abstraction_type": "xilinx.com:signal:reset_rtl:1.0",
+          "mode": "slave",
+          "parameters": {
+            "POLARITY": [ { "value": "ACTIVE_HIGH", "value_src": "user", "value_permission": "bd_and_user", "resolve_type": "generated", "is_ips_inferred": true, "is_static_object": false } ],
+            "INSERT_VIP": [ { "value": "0", "resolve_type": "user", "format": "long", "usage": "simulation.rtl", "is_ips_inferred": true, "is_static_object": false } ]
+          },
+          "port_maps": {
+            "RST": [ { "physical_name": "reset" } ]
+          }
+        }
+      }
+    }
+  }
+}

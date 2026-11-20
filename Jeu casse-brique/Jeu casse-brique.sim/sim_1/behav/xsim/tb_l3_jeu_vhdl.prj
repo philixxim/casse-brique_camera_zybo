@@ -1,0 +1,9 @@
+# compile vhdl design source files
+vhdl xil_defaultlib  \
+"../../../../../src/pkg_jeu.vhd" \
+"../../../../../src/game_fsm.vhd" \
+"../../../../../src/score_vies.vhd" \
+"../../../../../tb/tb_l3_jeu.vhd" \
+
+# Do not sort compile order
+nosort

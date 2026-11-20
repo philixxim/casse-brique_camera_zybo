@@ -1,0 +1,400 @@
+proc bin {v n} {set s {}; for {set i [expr {$n-1}]} {$i>=0} {incr i -1} {append s [expr {($v>>$i)&1}]}; return $s}
+# Livrables 3 et 4 : sauvegarde de L2 puis installation de la version complète
+set racine {C:/Users/pcifm/Desktop/casse-brique_camera_zybo}
+proc ecrire {chemin texte} { set f [open $chemin w]; fconfigure $f -encoding utf-8 -translation lf; puts -nonewline $f $texte; close $f }
+catch {close_sim -force -quiet}
+
+# ---------- 1. Sauvegarde du livrable 2 dans livrable2/ ----------
+set l2 [file join $racine livrable2]
+file mkdir $l2
+foreach d {src tb constraints} { file copy -force [file join $racine $d] $l2 }
+file mkdir [file join $l2 scripts]
+open_bd_design [get_files HDMI_bd.bd]
+write_bd_tcl -force [file join $l2 scripts HDMI_bd.tcl]
+foreach s {l2_setup.tcl l2_sim_bitstream.tcl} { if {[file exists [file join $racine $s]]} { file copy -force [file join $racine $s] [file join $l2 scripts] } }
+set bit [glob -nocomplain [file join [get_property DIRECTORY [get_runs impl_1]] *.bit]]
+if {[llength $bit] > 0} { file copy -force [lindex $bit 0] $l2 }
+ecrire [file join $l2 README.md] {# Livrable 2 - Contrôle par caméra
+
+Version figée du livrable L2 (20 novembre 2026).
+
+## Contenu
+- src/ : code VHDL (L1 + detection_couleur, game_physics, top_breakout mis à jour)
+- tb/ : bancs d'essai tb_l1_chaine_video, tb_l2_detection, tb_l2_physique
+- constraints/ : contraintes de la Zybo Z7-20 (SW1 miroir, LD0 détection)
+- scripts/ : Block Design exporté
+- HDMI_bd_wrapper.bit : bitstream
+
+## Fonctionnement
+La détection repère les pixels rouges (R >= 180, G et B < 100) et donne le
+centre de l'objet (boîte englobante, au moins 200 pixels). La raquette suit
+l'objet avec un lissage. La balle part de la raquette, rebondit sur les bords,
+sous le mur et sur la raquette (angle selon le point d'impact).
+SW0 : caméra en fond. SW1 : effet miroir. LD0 : objet rouge détecté.
+
+## Résultats
+- Synthèse et implémentation sans erreur
+- Timing respecté : WNS = +1,23 ns, WHS = +0,07 ns
+- Ressources : 1629 LUT, 984 registres, 0 BRAM, 0 DSP, 0,53 W
+- Simulations : non exécutées (simulateur bloqué sur le PC après un plantage
+  de Vivado) ; à relancer.
+}
+puts "=== LIVRABLE 2 SAUVEGARDE DANS livrable2 ==="
+
+# ---------- 2. Fichiers de la version complète ----------
+ecrire [file join $racine src/pkg_jeu.vhd] {-------------------------------------------------------------------------------
+-- pkg_jeu.vhd
+-- Projet : Casse-briques contrôlé par caméra sur ZYBO (GIF-4202, A26)
+--
+-- Constantes et types partagés par toute l'équipe : largeur des coordonnées,
+-- épaisseur des bords, couleurs, états du jeu et textes affichés.
+-- Les couleurs sont écrites dans l'ordre des IP Digilent dvi2rgb/rgb2dvi :
+-- R(23 downto 16), B(15 downto 8), G(7 downto 0).
+--
+-- Règles du cours : pas de variables ni de fonctions (ce paquetage ne
+-- contient que des constantes et des types).
+-------------------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+package pkg_jeu is
+
+    -- Coordonnées sur 11 bits : jusqu'à 2047 pixels (720p, 1080p)
+    constant NB_BITS : positive := 11;
+    subtype t_coord is unsigned(NB_BITS-1 downto 0);
+
+    -- Bornes des 8 colonnes / 8 rangées de briques (9 bornes chacune)
+    type t_bornes is array (0 to 8) of t_coord;
+
+    -- Épaisseur des bords gauche, droit et haut de la zone de jeu (pixels)
+    constant BORD   : natural := 8;
+    constant C_BORD : t_coord := "00000001000";
+
+    -- Couleurs (format R B G)
+    subtype t_couleur is std_logic_vector(23 downto 0);
+    constant COUL_NOIR    : t_couleur := x"000000";
+    constant COUL_BLANC   : t_couleur := x"FFFFFF";
+    constant COUL_GRIS    : t_couleur := x"808080";  -- bords
+    constant COUL_RAQUETTE: t_couleur := x"00FFFF";  -- cyan
+    constant COUL_MARQUEUR: t_couleur := x"FFFF00";  -- magenta
+    constant COUL_MESSAGE : t_couleur := x"FF00FF";  -- jaune
+
+    -- Couleur de chaque rangée de briques, de haut en bas
+    type t_couleurs_rangees is array (0 to 7) of t_couleur;
+    constant COUL_RANGEES : t_couleurs_rangees := (
+        x"FF0000",   -- 0 rouge
+        x"FF0080",   -- 1 orange
+        x"FF00FF",   -- 2 jaune
+        x"0000FF",   -- 3 vert
+        x"00FFFF",   -- 4 cyan
+        x"00FF00",   -- 5 bleu
+        x"80FF00",   -- 6 violet
+        x"FF8080"    -- 7 rose
+    );
+
+    -- États du jeu (game_fsm)
+    subtype t_etat is std_logic_vector(2 downto 0);
+    constant ETAT_ACCUEIL : t_etat := "000";
+    constant ETAT_JEU     : t_etat := "001";
+    constant ETAT_VIE     : t_etat := "010";   -- vie perdue
+    constant ETAT_PAUSE   : t_etat := "011";
+    constant ETAT_GAGNE   : t_etat := "100";
+    constant ETAT_FIN     : t_etat := "101";   -- partie terminée
+
+    -- Textes : 16 caractères, codes de la ROM de police (rom_police)
+    --   0 à 9 = chiffres, 10 à 35 = A à Z, 36 = espace, 37 = !, 38 = :, 39 = ?
+    subtype t_car is unsigned(5 downto 0);
+    type t_texte is array (0 to 15) of t_car;
+    constant CAR_ESPACE : t_car := "100100";
+
+    -- « APPUYEZ SUR BTN0 »
+    constant MSG_ACCUEIL : t_texte := ("001010", "011001", "011001", "011110", "100010", "001110", "100011", "100100", "011100", "011110", "011011", "100100", "001011", "011101", "010111", "000000");
+    -- «      PAUSE »
+    constant MSG_PAUSE : t_texte := ("100100", "100100", "100100", "100100", "100100", "011001", "001010", "011110", "011100", "001110", "100100", "100100", "100100", "100100", "100100", "100100");
+    -- «    VIE PERDUE »
+    constant MSG_VIE : t_texte := ("100100", "100100", "100100", "011111", "010010", "001110", "100100", "011001", "001110", "011011", "001101", "011110", "001110", "100100", "100100", "100100");
+    -- «     BRAVO ! »
+    constant MSG_GAGNE : t_texte := ("100100", "100100", "100100", "100100", "001011", "011011", "001010", "011111", "011000", "100100", "100101", "100100", "100100", "100100", "100100", "100100");
+    -- « PARTIE TERMINEE »
+    constant MSG_FIN : t_texte := ("011001", "001010", "011011", "011101", "010010", "001110", "100100", "011101", "001110", "011011", "010110", "010010", "010111", "001110", "001110", "100100");
+    -- « SCORE »
+    constant MSG_SCORE : t_texte := ("011100", "001100", "011000", "011011", "001110", "100100", "100100", "100100", "100100", "100100", "100100", "100100", "100100", "100100", "100100", "100100");
+    -- « VIES »
+    constant MSG_VIES : t_texte := ("011111", "010010", "001110", "011100", "100100", "100100", "100100", "100100", "100100", "100100", "100100", "100100", "100100", "100100", "100100", "100100");
+
+end package pkg_jeu;
+}
+set entete_rom {-------------------------------------------------------------------------------
+-- rom_police.vhd
+-- Projet : Casse-briques contrôlé par caméra sur ZYBO (GIF-4202, A26)
+-- Livrable : L3 - Jeu complet
+-- Responsable : Philippe (rendu graphique)
+--
+-- ROM de police : 40 caractères de 5 x 7 pixels dans une cellule de 8 x 8.
+-- Codes : 0 à 9 = chiffres, 10 à 35 = A à Z, 36 = espace, 37 = « ! »,
+-- 38 = « : », 39 = « ? ». Adresse = code (6 bits) & rangée (3 bits).
+-- Le bit 7 de la sortie est la colonne de gauche.
+--
+-- Écrite comme une affectation sélectionnée (pas de tableau indexé par un
+-- entier) : aucune fonction de conversion n'est nécessaire.
+-------------------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity rom_police is
+    port (
+        code    : in  unsigned(5 downto 0);
+        rangee  : in  unsigned(2 downto 0);
+        motif   : out std_logic_vector(7 downto 0)
+    );
+end rom_police;
+
+architecture rtl of rom_police is
+    signal adresse : std_logic_vector(8 downto 0);
+begin
+
+    adresse <= std_logic_vector(code) & std_logic_vector(rangee);
+
+    with adresse select motif <=
+}
+set pied_rom {        "00000000" when others;
+
+end rtl;
+}
+# ROM de police générée à partir des motifs (8 rangées de 8 bits par caractère)
+set glyphes {0011100001000100010011000101010001100100010001000011100000000000 0001000000110000000100000001000000010000000100000011100000000000 0011100001000100000001000000100000010000001000000111110000000000 0111100000000100000001000011100000000100000001000111100000000000 0000100000011000001010000100100001111100000010000000100000000000 0111110001000000011110000000010000000100010001000011100000000000 0011100001000000010000000111100001000100010001000011100000000000 0111110000000100000010000001000000100000001000000010000000000000 0011100001000100010001000011100001000100010001000011100000000000 0011100001000100010001000011110000000100000001000011100000000000 0011100001000100010001000111110001000100010001000100010000000000 0111100001000100010001000111100001000100010001000111100000000000 0011100001000100010000000100000001000000010001000011100000000000 0111100001000100010001000100010001000100010001000111100000000000 0111110001000000010000000111100001000000010000000111110000000000 0111110001000000010000000111100001000000010000000100000000000000 0011100001000100010000000101110001000100010001000011110000000000 0100010001000100010001000111110001000100010001000100010000000000 0011100000010000000100000001000000010000000100000011100000000000 0001110000001000000010000000100000001000010010000011000000000000 0100010001001000010100000110000001010000010010000100010000000000 0100000001000000010000000100000001000000010000000111110000000000 0100010001101100010101000101010001000100010001000100010000000000 0100010001100100010101000100110001000100010001000100010000000000 0011100001000100010001000100010001000100010001000011100000000000 0111100001000100010001000111100001000000010000000100000000000000 0011100001000100010001000100010001010100010010000011010000000000 0111100001000100010001000111100001010000010010000100010000000000 0011110001000000010000000011100000000100000001000111100000000000 0111110000010000000100000001000000010000000100000001000000000000 0100010001000100010001000100010001000100010001000011100000000000 0100010001000100010001000100010001000100001010000001000000000000 0100010001000100010001000101010001010100010101000010100000000000 0100010001000100001010000001000000101000010001000100010000000000 0100010001000100001010000001000000010000000100000001000000000000 0111110000000100000010000001000000100000010000000111110000000000 0000000000000000000000000000000000000000000000000000000000000000 0001000000010000000100000001000000010000000000000001000000000000 0000000000010000000100000000000000010000000100000000000000000000 0011100001000100000001000000100000010000000000000001000000000000}
+set rom_lignes {}
+set c 0
+foreach g $glyphes {
+    for {set r 0} {$r < 8} {incr r} {
+        lappend rom_lignes "        \"[string range $g [expr {8*$r}] [expr {8*$r+7}]]\" when \"[bin $c 6][bin $r 3]\","
+    }
+    incr c
+}
+ecrire [file join $racine src/rom_police.vhd] "[set entete_rom][join $rom_lignes \n]\n[set pied_rom]"
+ecrire [file join $racine src/ligne_texte.vhd] {-------------------------------------------------------------------------------
+-- ligne_texte.vhd
+-- Projet : Casse-briques contrôlé par caméra sur ZYBO (GIF-4202, A26)
+-- Livrable : L3 - Jeu complet
+-- Responsable : Philippe (rendu graphique)
+--
+-- Affiche une ligne de 16 caractères au plus, coin supérieur gauche (x0, y0).
+-- Chaque caractère fait 8 x 8 pixels, agrandi d'un facteur 1, 2 ou 4
+-- (echelle = 0, 1 ou 2) pour rester lisible quelle que soit la résolution.
+-- L'agrandissement est un décalage à droite de la position : pas de division.
+-- allume = '1' quand le pixel courant fait partie d'un caractère.
+--
+-- Règles du cours : pas de variables ni de fonctions.
+-------------------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use work.pkg_jeu.all;
+
+entity ligne_texte is
+    generic (
+        NB_CAR : positive := 16
+    );
+    port (
+        x_pixel : in  t_coord;
+        y_pixel : in  t_coord;
+        x0      : in  t_coord;
+        y0      : in  t_coord;
+        echelle : in  unsigned(1 downto 0);
+        texte   : in  t_texte;
+        allume  : out std_logic
+    );
+end ligne_texte;
+
+architecture rtl of ligne_texte is
+    signal dx, dy     : t_coord;
+    signal dx_r, dy_r : t_coord;     -- positions ramenées à l'échelle 1
+    signal dans       : std_logic;
+    signal colonne    : std_logic_vector(3 downto 0);
+    signal cx         : std_logic_vector(2 downto 0);
+    signal code       : t_car;
+    signal motif      : std_logic_vector(7 downto 0);
+    signal point      : std_logic;
+begin
+
+    dx <= x_pixel - x0;
+    dy <= y_pixel - y0;
+
+    dx_r <= dx                         when echelle = "00" else
+            '0'  & dx(NB_BITS-1 downto 1) when echelle = "01" else
+            "00" & dx(NB_BITS-1 downto 2);
+    dy_r <= dy                         when echelle = "00" else
+            '0'  & dy(NB_BITS-1 downto 1) when echelle = "01" else
+            "00" & dy(NB_BITS-1 downto 2);
+
+    dans <= '1' when x_pixel >= x0 and y_pixel >= y0
+                 and dx_r < NB_CAR * 8 and dy_r < 8 else '0';
+
+    colonne <= std_logic_vector(dx_r(6 downto 3));
+    cx      <= std_logic_vector(dx_r(2 downto 0));
+
+    with colonne select code <=
+        texte(0) when "0000",
+        texte(1) when "0001",
+        texte(2) when "0010",
+        texte(3) when "0011",
+        texte(4) when "0100",
+        texte(5) when "0101",
+        texte(6) when "0110",
+        texte(7) when "0111",
+        texte(8) when "1000",
+        texte(9) when "1001",
+        texte(10) when "1010",
+        texte(11) when "1011",
+        texte(12) when "1100",
+        texte(13) when "1101",
+        texte(14) when "1110",
+        texte(15) when others;
+
+    u_rom : entity work.rom_police
+        port map (
+            code   => code,
+            rangee => dy_r(2 downto 0),
+            motif  => motif
+        );
+
+    with cx select point <=
+        motif(7) when "000",
+        motif(6) when "001",
+        motif(5) when "010",
+        motif(4) when "011",
+        motif(3) when "100",
+        motif(2) when "101",
+        motif(1) when "110",
+        motif(0) when others;
+
+    allume <= dans and point;
+
+end rtl;
+}
+ecrire [file join $racine src/affichage_texte.vhd] {-------------------------------------------------------------------------------
+-- affichage_texte.vhd
+-- Projet : Casse-briques contrôlé par caméra sur ZYBO (GIF-4202, A26)
+-- Livrable : L3 - Jeu complet
+-- Responsable : Philippe (rendu graphique)
+--
+-- Textes affichés par-dessus le jeu :
+--   * en haut à gauche : « SCORE 0000 » (score en BCD, 4 chiffres) ;
+--   * en haut à droite : « VIES n » ;
+--   * au centre, en jaune, un message selon l'état du jeu : accueil, pause,
+--     vie perdue, victoire, partie terminée (aucun message pendant la partie).
+-- La taille des caractères suit la résolution : 8 px de haut sous 600 lignes,
+-- 16 px jusqu'à 1000 lignes, 32 px au-delà.
+--
+-- Règles du cours : pas de variables ni de fonctions.
+-------------------------------------------------------------------------------
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use work.pkg_jeu.all;
+
+entity affichage_texte is
+    port (
+        x_pixel       : in  t_coord;
+        y_pixel       : in  t_coord;
+        larg_ecran    : in  t_coord;
+        haut_ecran    : in  t_coord;
+        score         : in  std_logic_vector(15 downto 0);   -- 4 chiffres BCD
+        vies          : in  unsigned(2 downto 0);
+        etat          : in  t_etat;
+        texte_allume  : out std_logic;
+        texte_couleur : out t_couleur
+    );
+end affichage_texte;
+
+architecture rtl of affichage_texte is
+    constant C_MARGE : t_coord := "00000010000";   -- 16 pixels
+
+    signal echelle     : unsigned(1 downto 0);
+    signal larg_6car   : t_coord;   -- largeur de 6 caractères
+    signal demi_16car  : t_coord;   -- moitié de la largeur de 16 caractères
+    signal x_vies      : t_coord;
+    signal x_message   : t_coord;
+    signal y_message   : t_coord;
+
+    signal texte_score : t_texte;
+    signal texte_vies  : t_texte;
+    signal message     : t_texte;
+    signal avec_msg    : std_logic;
+
+    signal score_on    : std_logic;
+    signal vies_on     : std_logic;
+    signal message_on  : std_logic;
+begin
+
+    echelle <= "10" when haut_ecran >= 1000 else
+               "01" when haut_ecran >= 600  else
+               "00";
+
+    -- 6 caractères = 48 px à l'échelle 1 ; 8 caractères = 64 px
+    larg_6car  <= "00000110000" when echelle = "00" else
+                  "00001100000" when echelle = "01" else
+                  "00011000000";
+    demi_16car <= "00001000000" when echelle = "00" else
+                  "00010000000" when echelle = "01" else
+                  "00100000000";
+
+    x_vies    <= larg_ecran - C_MARGE - larg_6car;
+    x_message <= ('0' & larg_ecran(NB_BITS-1 downto 1)) - demi_16car;
+    y_message <= ('0' & haut_ecran(NB_BITS-1 downto 1)) + ("0000" & haut_ecran(NB_BITS-1 downto 4));
+
+    -- « SCORE dddd »
+    texte_score(0 to 5)   <= MSG_SCORE(0 to 5);
+    texte_score(6)        <= "00" & unsigned(score(15 downto 12));
+    texte_score(7)        <= "00" & unsigned(score(11 downto 8));
+    texte_score(8)        <= "00" & unsigned(score(7 downto 4));
+    texte_score(9)        <= "00" & unsigned(score(3 downto 0));
+    texte_score(10 to 15) <= MSG_SCORE(10 to 15);
+
+    -- « VIES n »
+    texte_vies(0 to 4)  <= MSG_VIES(0 to 4);
+    texte_vies(5)       <= "000" & vies;
+    texte_vies(6 to 15) <= MSG_VIES(6 to 15);
+
+    -- Message selon l'état
+    with etat select message <=
+        MSG_ACCUEIL when ETAT_ACCUEIL,
+        MSG_PAUSE   when ETAT_PAUSE,
+        MSG_VIE     when ETAT_VIE,
+        MSG_GAGNE   when ETAT_GAGNE,
+        MSG_FIN     when others;
+
+    avec_msg <= '0' when etat = ETAT_JEU else '1';
+
+    u_score : entity work.ligne_texte
+        generic map (NB_CAR => 10)
+        port map (
+            x_pixel => x_pixel, y_pixel => y_pixel,
+            x0 => C_MARGE, y0 => C_MARGE, echelle => echelle,
+            texte => texte_score, allume => score_on
+        );
+
+    u_vies : entity work.ligne_texte
+        generic map (NB_CAR => 6)
+        port map (
+            x_pixel => x_pixel, y_pixel => y_pixel,
+            x0 => x_vies, y0 => C_MARGE, echelle => echelle,
+            texte => texte_vies, allume => vies_on
+        );
+
+    u_message : entity work.ligne_texte
+        generic map (NB_CAR => 16)
+        port map (
+            x_pixel => x_pixel, y_pixel => y_pixel,
+            x0 => x_message, y0 => y_message, echelle => echelle,
+            texte => message, allume => message_on
+        );
+
+    texte_allume  <= score_on or vies_on or (message_on and avec_msg);
+    texte_couleur <= COUL_MESSAGE when message_on = '1' and avec_msg = '1' else COUL_BLANC;
+
+end rtl;
+}
+puts "=== PARTIE 1 OK ==="
